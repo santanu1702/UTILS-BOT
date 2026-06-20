@@ -1,0 +1,30 @@
+services:
+  telegram_utils_bot:
+    container_name: telegram_utils_bot
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        UID: ${UID:-1000}
+        GID: ${GID:-1000}
+    environment:
+      - TZ=Africa/Cairo
+    env_file:
+      - .env
+    volumes:
+      - ./src:/code/app/src
+      - ./pyproject.toml:/code/app/pyproject.toml
+      - ./uv.lock:/code/app/uv.lock
+      - ./downloads:/code/app/downloads
+      - ./tmp:/code/app/tmp
+      - ./state:/code/app/state
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      - bgutil-provider
+    restart: unless-stopped
+  bgutil-provider:
+    container_name: bgutil-provider
+    image: brainicism/bgutil-ytdlp-pot-provider:1.3.1
+    ports:
+      - "127.0.0.1:4416:4416"
+    restart: unless-stopped

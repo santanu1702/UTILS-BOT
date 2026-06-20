@@ -1,0 +1,108 @@
+# Render Blueprint for telegram-utils-bot
+# https://render.com/docs/blueprint-spec
+#
+# This bot is a long-running Telethon client (it polls Telegram via MTProto and
+# never needs to accept inbound HTTP traffic), so it is deployed as a Render
+# "Background Worker" — the correct service type for this kind of process.
+#
+# It depends on system packages (ffmpeg, aria2, tesseract-ocr, ghostscript,
+# poppler-utils, p7zip, the Deno runtime, etc.) that are not available on
+# Render's native Python runtime. The project already ships a production
+# Dockerfile that installs all of these, so the worker is built from that
+# Dockerfile rather than from requirements.txt.
+#
+# Deploy: in the Render Dashboard choose "New +" -> "Blueprint", point it at
+# this repository, and Render will read this file automatically.
+#
+# After the first deploy, fill in the env vars marked "sync: false" from the
+# Render Dashboard (Environment tab) — Render only prompts for them during the
+# initial Blueprint setup.
+
+services:
+  # ---------------------------------------------------------------------
+  # Main bot process
+  # ---------------------------------------------------------------------
+  - type: worker
+    name: telegram-utils-bot
+    runtime: docker
+    plan: starter # "free" is not available for background workers
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    autoDeployTrigger: commit
+    # Give the bot time to finish in-flight downloads/uploads before a redeploy kills it
+    maxShutdownDelaySeconds: 120
+    envVars:
+      # --- Required: get these from https://my.telegram.org and @BotFather ---
+      - key: BOT_TOKEN
+        sync: false
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      # Comma-separated Telegram user IDs with admin access (broadcast/restart/update/etc.)
+      - key: BOT_ADMINS
+        sync: false
+
+      # --- Core behaviour (safe defaults, override if you like) ---
+      - key: BOT_LANGUAGE
+        value: en_US
+      - key: DEBUG
+        value: '0'
+
+      # --- Optional integrations: leave as sync:false placeholders; only ---
+      # --- fill in the ones whose features you actually want enabled.   ---
+      - key: HADITH_SEARCH_ENDPOINT
+        sync: false
+      - key: EXCHANGE_RATE_API_KEY
+        sync: false
+      - key: WHISPER_MODEL_PATH
+        sync: false
+      - key: WIT_CLIENT_ACCESS_TOKENS
+        sync: false
+      - key: SERVICE_ACCOUNT_FILE
+        sync: false
+      - key: LLM_GEMINI_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false
+      - key: LLM_TRANSCRIPTION_MODEL
+        value: groq/whisper-large-v3
+      - key: GPLAY_DISPENSER_URL
+        sync: false
+      # Used by the /update admin command for git-less (archive-based) self-updates
+      - key: UPDATE_REPO_URL
+        sync: false
+      - key: UPDATE_REPO_BRANCH
+        sync: false
+
+      # Points yt-dlp's YouTube POT provider at the sidecar service below.
+      # Render assigns private services a generated hostname, so this is wired
+      # up automatically via `fromService` rather than hardcoded.
+      - key: BGUTIL_PROVIDER_URL
+        fromService:
+          type: pserv
+          name: bgutil-provider
+          property: hostport
+
+    # Persists Telethon session files, permissions.json, modules.json, and any
+    # user plugins dropped into state/plugins across deploys/restarts.
+    disk:
+      name: bot-state
+      mountPath: /code/app/state
+      sizeGB: 1
+
+  # ---------------------------------------------------------------------
+  # Optional sidecar: YouTube POT token provider used by the ytdlp plugin
+  # to reduce "Sign in to confirm you're not a bot" failures. Mirrors the
+  # bgutil-provider service in docker-compose.yml. Safe to delete this
+  # service block if you don't need it — the bot works fine without it,
+  # ytdlp will just fall back to its normal behaviour.
+  # ---------------------------------------------------------------------
+  - type: pserv
+    name: bgutil-provider
+    runtime: image
+    plan: starter
+    region: oregon
+    image:
+      url: docker.io/brainicism/bgutil-ytdlp-pot-provider:1.3.1
