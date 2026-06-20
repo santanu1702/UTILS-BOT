@@ -1,1 +1,66 @@
+"""Bot initialization"""
 
+import logging.config
+from os import getenv
+from pathlib import Path
+from shutil import rmtree
+
+# paths
+WORK_DIR = Path(__file__).resolve().parent
+PARENT_DIR = WORK_DIR.parent
+
+STATE_DIR = PARENT_DIR / 'state'
+STATE_DIR.mkdir(exist_ok=True)
+
+DOWNLOADS_DIR = PARENT_DIR / 'downloads'
+DOWNLOADS_DIR.mkdir(exist_ok=True)
+TMP_DIR = (PARENT_DIR / 'tmp').resolve()
+rmtree(TMP_DIR, ignore_errors=True)
+TMP_DIR.mkdir(exist_ok=True)
+
+# bot config
+IS_DEBUG: bool = getenv('DEBUG', '').lower() in ('true', '1')
+BOT_TOKEN = getenv('BOT_TOKEN') or ''
+API_ID = int(getenv('API_ID') or 0)
+API_HASH = getenv('API_HASH') or ''
+BOT_ADMINS = [
+    int(admin_str.strip()) for admin_str in getenv('BOT_ADMINS', '').split(',') if admin_str
+] or []
+
+# Logging
+log_file_path = PARENT_DIR / 'bot.log'
+logging_config = {
+    'version': 1,
+    'disable_existing_loggers': False,
+    'formatters': {
+        'detailed': {
+            'format': '%(asctime)s [%(levelname)s] %(name)s [%(module)s.%(funcName)s:%(lineno)d]: %(message)s',
+            'datefmt': '%Y-%m-%d %H:%M:%S',
+        },
+    },
+    'handlers': {
+        'file': {
+            'class': 'logging.handlers.TimedRotatingFileHandler',
+            'level': 'INFO',
+            'formatter': 'detailed',
+            'filename': log_file_path,
+            'when': 'midnight',
+            'interval': 1,
+            'backupCount': 7,
+        },
+        'console': {
+            'class': 'logging.StreamHandler',
+            'level': 'INFO',
+            'formatter': 'detailed',
+            'stream': 'ext://sys.stdout',
+        },
+    },
+    'loggers': {
+        '': {  # root logger
+            'handlers': ['file', 'console'],
+            'level': 'INFO',
+            'propagate': True,
+        },
+    },
+}
+logging.config.dictConfig(logging_config)
